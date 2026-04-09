@@ -175,11 +175,15 @@ public extension FinderItem.AsyncLoadableContent where Result == NativeImage {
     /// The best representation, the preview or icon, of a file.
     static func bestIcon(size: CGSize) -> FinderItem.AsyncLoadableContent<NativeImage, any Error> {
         .init { source in
+#if canImport(AppKit) && !targetEnvironment(macCatalyst)
             if try source.load(.hasCustomIcon) {
                 return try await source.load(.icon(size: size))
             } else {
                 return try await source.load(.preview(size: size))
             }
+#else
+            return try await source.load(.preview(size: size))
+#endif
         }
     }
     
