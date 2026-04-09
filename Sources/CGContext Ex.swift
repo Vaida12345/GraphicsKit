@@ -36,16 +36,20 @@ public extension CGContext {
             width: Int(size.width),
             height: Int(size.height),
             bitsPerComponent: preset!.bitsPerComponent,
-            bytesPerRow: 0, space: space,
+            bytesPerRow: 0,
+            space: space,
             bitmapInfo: preset!.bitmapInfo
         )
+        
+        let fallbackColorSpace = preset!.bitsPerComponent == 8 ? CGColorSpace.sRGB : CGColorSpace.extendedSRGB
         
         let fallback = CGContext(
             data: nil,
             width: Int(size.width),
             height: Int(size.height),
             bitsPerComponent: preset!.bitsPerComponent,
-            bytesPerRow: 0, space: CGColorSpace(name: preset!.bitsPerComponent == 8 ? CGColorSpace.sRGB : CGColorSpace.extendedSRGB)!,
+            bytesPerRow: 0,
+            space: CGColorSpace(name: fallbackColorSpace)!,
             bitmapInfo: preset!.bitmapInfo
         )!
         
@@ -103,7 +107,7 @@ public extension CGContext {
             ParameterPreset(bitsPerPixel: 32,  bitsPerComponent: 8,  hasAlpha: true,  colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue),
             ParameterPreset(bitsPerPixel: 32,  bitsPerComponent: 8,  hasAlpha: true,  colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
             
-            ParameterPreset(bitsPerPixel: 32,  bitsPerComponent: 10, hasAlpha: false, colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.none.rawValue | CGImagePixelFormatInfo.RGBCIF10.rawValue),
+            ParameterPreset(bitsPerPixel: 32,  bitsPerComponent: 10, hasAlpha: false, colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.none.rawValue | CGImagePixelFormatInfo.RGBCIF10.rawValue | CGImageByteOrderInfo.order32Little.rawValue),
             
             ParameterPreset(bitsPerPixel: 64,  bitsPerComponent: 16, hasAlpha: true,  colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
             ParameterPreset(bitsPerPixel: 64,  bitsPerComponent: 16, hasAlpha: false, colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),

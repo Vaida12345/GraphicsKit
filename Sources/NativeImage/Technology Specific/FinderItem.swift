@@ -102,6 +102,10 @@ public extension FinderItem.LoadableContent {
         }
     }
     
+}
+
+public extension FinderItem.AsyncLoadableContent where Result == NativeImage {
+    
 #if canImport(AppKit) && !targetEnvironment(macCatalyst)
     /// Returns the icon at the location.
     ///
@@ -111,7 +115,9 @@ public extension FinderItem.LoadableContent {
     ///   - size: The size of the image.
     ///
     /// - Returns: If the file does not exist, or no representations larger than `size`, returns nil.
-    static func icon(size: CGSize? = nil) -> FinderItem.LoadableContent<NativeImage, any Error> {
+    ///
+    /// - SeeAlso: ``bestIcon(size:)``.
+    static func icon(size: CGSize? = nil) -> FinderItem.AsyncLoadableContent<NativeImage, any Error> {
         .init { (source: FinderItem) throws -> NativeImage in
             guard source.exists else { throw FinderItem.FileError(code: .cannotRead(reason: .noSuchFile), source: source) }
             let icons = NSWorkspace.shared.icon(forFile: source.path)
@@ -128,9 +134,6 @@ public extension FinderItem.LoadableContent {
         }
     }
 #endif
-}
-
-public extension FinderItem.AsyncLoadableContent {
     
 #if !os(tvOS) && !os(watchOS)
     private static func generateImage(type: QLThumbnailGenerator.Request.RepresentationTypes, url: URL, size: CGSize) async throws -> (NativeImage, QLThumbnailRepresentation.RepresentationType) {
@@ -149,6 +152,8 @@ public extension FinderItem.AsyncLoadableContent {
     ///   - size: The size of the image.
     ///
     /// - Returns: If the file does not exist, or no representations larger than `size`, returns nil.
+    ///
+    /// - SeeAlso: ``bestIcon(size:)``.
     static func preview(size: CGSize) -> FinderItem.AsyncLoadableContent<NativeImage, any Error> {
         .init { source in
             guard source.exists else { throw FinderItem.FileError(code: .cannotRead(reason: .noSuchFile), source: source) }
@@ -156,14 +161,26 @@ public extension FinderItem.AsyncLoadableContent {
                 return try await generateImage(type: .thumbnail, url: source.url, size: size).0
             } catch {
 #if canImport(AppKit) && !targetEnvironment(macCatalyst)
-                do {
-                    return try source.load(.icon(size: size))
-                } catch {}
+                if let icon = try? await source.load(.icon(size: size)) {
+                    return icon
+                }
 #endif
                 return try await generateImage(type: .icon, url: source.url, size: size).0
             }
         }
     }
 #endif
+    
+    
+    /// The best representation, the preview or icon, of a file.
+    static func bestIcon(size: CGSize) -> FinderItem.AsyncLoadableContent<NativeImage, any Error> {
+        .init { source in
+            if try source.load(.hasCustomIcon) {
+                return try await source.load(.icon(size: size))
+            } else {
+                return try await source.load(.preview(size: size))
+            }
+        }
+    }
     
 }
