@@ -8,9 +8,15 @@
 
 import CoreGraphics
 import Essentials
+import OSLog
 
 
 public extension CGContext {
+    
+    /// Alpha option for ``createContext(size:bitsPerComponent:space:alpha:)``.
+    enum CreateContextAlphaOption {
+        case none, hasAlpha, alphaOnly
+    }
     
     /// Creates a valid default context by its parameters.
     ///
@@ -22,9 +28,24 @@ public extension CGContext {
     ///
     /// - Returns: The best match for the given parameters. If a match for the colorSpace cannot be found, `rgb` would be used instead.
     static func createContext(size: CGSize, bitsPerComponent: Int, space: CGColorSpace, withAlpha: Bool) -> CGContext {
+        createContext(size: size, bitsPerComponent: bitsPerComponent, space: space, alpha: withAlpha ? .hasAlpha : .none)
+    }
+    
+    /// Creates a valid default context by its parameters.
+    ///
+    /// - Parameters:
+    ///   - size: The size, in pixels, of the required bitmap.
+    ///   - bitsPerComponent: The number of bits to use for each component of a pixel in memory.
+    ///   - space: The color space to use for the bitmap context.
+    ///   - withAlpha: Indicating whether the image has alpha channel.
+    ///
+    /// - Returns: The best match for the given parameters. If a match for the colorSpace cannot be found, `rgb` would be used instead.
+    static func createContext(size: CGSize, bitsPerComponent: Int, space: CGColorSpace, alpha: CreateContextAlphaOption) -> CGContext {
+        let logger = Logger(subsystem: "NativeImage", category: "CGContext.createContext")
+        
         let optimalPreset = ParameterPreset.allCases
             .filter { preset in
-                guard preset.hasAlpha == withAlpha && preset.colorModel == space.model else { return false }
+                guard preset.alpha == alpha && preset.colorModel == space.model else { return false }
                 // CGColorSpace which uses extended range requires floating point or CIF10 bitmap context
                 guard space.name.isNil(or: { ($0 as String).localizedStandardContains("extended") => preset.isSuitableForExtendedColorSpace }) else { return false }
                 
@@ -50,9 +71,11 @@ public extension CGContext {
                 space: space,
                 bitmapInfo: optimalPreset.bitmapInfo
             ) {
+                logger.info("Return with optimal preset & original color space.")
                 return optimal
             }
             
+            logger.info("Return with optimal preset & default color space with the same color model.")
             // optimal is not available, can only be colorspace issue.
             return CGContext(
                 data: nil,
@@ -70,13 +93,14 @@ public extension CGContext {
         // how about colorspace in the same colorspace model?
         let fallbackPreset = ParameterPreset.allCases
             .filter { preset in
-                preset.hasAlpha == withAlpha && preset.colorModel == space.model
+                preset.alpha == alpha && preset.colorModel == space.model
             }
             .nearestElement { instance in
                 instance.bitsPerComponent - bitsPerComponent
             }
         
         if let fallbackPreset {
+            logger.info("Return with fallback preset & default color space with the same color model.")
             return CGContext(
                 data: nil,
                 width: Int(size.width),
@@ -92,12 +116,13 @@ public extension CGContext {
         // let's do RGB.
         let finalPreset = ParameterPreset.allCases
             .filter { preset in
-                preset.hasAlpha == withAlpha && preset.colorModel == .rgb
+                preset.alpha == alpha && preset.colorModel == .rgb
             }
             .nearestElement { instance in
                 instance.bitsPerComponent - bitsPerComponent
             }
         
+        logger.info("Return with RGB Context.")
         return CGContext(
             data: nil,
             width: Int(size.width),
@@ -144,15 +169,20 @@ public extension CGContext {
         
         internal let bitsPerComponent: Int
         
-        internal var hasAlpha: Bool {
+        internal var alpha: CreateContextAlphaOption {
             let checks = [
                 bitmapInfo & CGImageAlphaInfo.first.rawValue == CGImageAlphaInfo.first.rawValue,
                 bitmapInfo & CGImageAlphaInfo.last.rawValue == CGImageAlphaInfo.first.rawValue,
-                bitmapInfo & CGImageAlphaInfo.alphaOnly.rawValue == CGImageAlphaInfo.first.rawValue,
                 bitmapInfo & CGImageAlphaInfo.premultipliedFirst.rawValue == CGImageAlphaInfo.first.rawValue,
                 bitmapInfo & CGImageAlphaInfo.premultipliedLast.rawValue == CGImageAlphaInfo.first.rawValue,
             ]
-            return checks.contains(true)
+            if checks.contains(true) {
+                return .hasAlpha
+            } else if bitmapInfo & CGImageAlphaInfo.alphaOnly.rawValue == CGImageAlphaInfo.alphaOnly.rawValue {
+                return .alphaOnly
+            } else {
+                return .none
+            }
         }
         
         internal var isSuitableForExtendedColorSpace: Bool {
@@ -184,8 +214,9 @@ public extension CGContext {
              16 bits per pixel,         16 bits per component,         kCGImageAlphaNone|kCGBitmapFloatComponents|kCGBitmapByteOrder16Little
              32 bits per pixel,         32 bits per component,         kCGImageAlphaNone|kCGBitmapFloatComponents
              */
-            ParameterPreset(bitsPerPixel: 8, bitsPerComponent: 8, colorModel: .monochrome,
-                            bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue),
+// Don't use alphaOnly.
+//            ParameterPreset(bitsPerPixel: 8, bitsPerComponent: 8, colorModel: .monochrome,
+//                            bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue),
             ParameterPreset(bitsPerPixel: 8, bitsPerComponent: 8, colorModel: .monochrome,
                             bitmapInfo: CGImageAlphaInfo.none.rawValue),
             ParameterPreset(bitsPerPixel: 16, bitsPerComponent: 8, colorModel: .monochrome,
