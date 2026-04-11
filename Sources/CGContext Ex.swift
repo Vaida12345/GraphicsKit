@@ -7,6 +7,7 @@
 //
 
 import CoreGraphics
+import Essentials
 
 
 public extension CGContext {
@@ -21,39 +22,91 @@ public extension CGContext {
     ///
     /// - Returns: The best match for the given parameters. If a match for the colorSpace cannot be found, `rgb` would be used instead.
     static func createContext(size: CGSize, bitsPerComponent: Int, space: CGColorSpace, withAlpha: Bool) -> CGContext {
-        let preset = ParameterPreset.allCases
-            .filter { $0.hasAlpha == withAlpha && $0.colorSpace == space.model }
-            .nearestElement { instance in
-                instance.bitsPerComponent - bitsPerComponent
-            } ?? ParameterPreset.allCases
-            .filter { $0.hasAlpha == withAlpha && $0.colorSpace == .rgb }
+        let optimalPreset = ParameterPreset.allCases
+            .filter { preset in
+                guard preset.hasAlpha == withAlpha && preset.colorModel == space.model else { return false }
+                // CGColorSpace which uses extended range requires floating point or CIF10 bitmap context
+                guard space.name.isNil(or: { ($0 as String).localizedStandardContains("extended") => preset.isSuitableForExtendedColorSpace }) else { return false }
+                
+                // CIF10 bitmap context requires extended sRGB color space
+                if preset.bitmapInfo & CGImagePixelFormatInfo.RGBCIF10.rawValue == CGImagePixelFormatInfo.RGBCIF10.rawValue {
+                    guard let name = space.name else { return false }
+                    return (name as String).localizedStandardContains("extended")
+                }
+                
+                return true
+            }
             .nearestElement { instance in
                 instance.bitsPerComponent - bitsPerComponent
             }
         
-        let optimal = CGContext(
+        if let optimalPreset {
+            if let optimal = CGContext(
+                data: nil,
+                width: Int(size.width),
+                height: Int(size.height),
+                bitsPerComponent: optimalPreset.bitsPerComponent,
+                bytesPerRow: 0,
+                space: space,
+                bitmapInfo: optimalPreset.bitmapInfo
+            ) {
+                return optimal
+            }
+            
+            // optimal is not available, can only be colorspace issue.
+            return CGContext(
+                data: nil,
+                width: Int(size.width),
+                height: Int(size.height),
+                bitsPerComponent: optimalPreset.bitsPerComponent,
+                bytesPerRow: 0,
+                space: optimalPreset.makeDefaultColorSpace(),
+                bitmapInfo: optimalPreset.bitmapInfo
+            )! // safe to unwrap, as tests ensures this is not nil.
+        }
+        
+        
+        // didn't find a suitable match for the given color space.
+        // how about colorspace in the same colorspace model?
+        let fallbackPreset = ParameterPreset.allCases
+            .filter { preset in
+                preset.hasAlpha == withAlpha && preset.colorModel == space.model
+            }
+            .nearestElement { instance in
+                instance.bitsPerComponent - bitsPerComponent
+            }
+        
+        if let fallbackPreset {
+            return CGContext(
+                data: nil,
+                width: Int(size.width),
+                height: Int(size.height),
+                bitsPerComponent: fallbackPreset.bitsPerComponent,
+                bytesPerRow: 0,
+                space: fallbackPreset.makeDefaultColorSpace(),
+                bitmapInfo: fallbackPreset.bitmapInfo
+            )! // safe to unwrap, as tests ensures this is not nil.
+        }
+        
+        // most likely invalid colorspace model
+        // let's do RGB.
+        let finalPreset = ParameterPreset.allCases
+            .filter { preset in
+                preset.hasAlpha == withAlpha && preset.colorModel == .rgb
+            }
+            .nearestElement { instance in
+                instance.bitsPerComponent - bitsPerComponent
+            }
+        
+        return CGContext(
             data: nil,
             width: Int(size.width),
             height: Int(size.height),
-            bitsPerComponent: preset!.bitsPerComponent,
+            bitsPerComponent: finalPreset!.bitsPerComponent,
             bytesPerRow: 0,
-            space: space,
-            bitmapInfo: preset!.bitmapInfo
-        )
-        
-        let fallbackColorSpace = preset!.bitsPerComponent == 8 ? CGColorSpace.sRGB : CGColorSpace.extendedSRGB
-        
-        let fallback = CGContext(
-            data: nil,
-            width: Int(size.width),
-            height: Int(size.height),
-            bitsPerComponent: preset!.bitsPerComponent,
-            bytesPerRow: 0,
-            space: CGColorSpace(name: fallbackColorSpace)!,
-            bitmapInfo: preset!.bitmapInfo
-        )!
-        
-        return optimal ?? fallback
+            space: finalPreset!.makeDefaultColorSpace(),
+            bitmapInfo: finalPreset!.bitmapInfo
+        )! // safe to unwrap, as tests ensures this is not nil.
     }
     
     
@@ -85,48 +138,145 @@ public extension CGContext {
     }
     
     /// The preset available in quartz 2D.
-    ///
-    /// - SeeAlso: [Developer Documentation](https://developer.apple.com/library/archive/documentation/GraphicsImaging/Conceptual/drawingwithquartz2d/dq_context/dq_context.html#//apple_ref/doc/uid/TP30001066-CH203-TPXREF101)
-    private struct ParameterPreset: CaseIterable {
+    internal struct ParameterPreset: CaseIterable {
         
-        fileprivate let bitsPerPixel: Int
+        internal let bitsPerPixel: Int
         
-        fileprivate let bitsPerComponent: Int
+        internal let bitsPerComponent: Int
         
-        fileprivate let hasAlpha: Bool
+        internal var hasAlpha: Bool {
+            let checks = [
+                bitmapInfo & CGImageAlphaInfo.first.rawValue == CGImageAlphaInfo.first.rawValue,
+                bitmapInfo & CGImageAlphaInfo.last.rawValue == CGImageAlphaInfo.first.rawValue,
+                bitmapInfo & CGImageAlphaInfo.alphaOnly.rawValue == CGImageAlphaInfo.first.rawValue,
+                bitmapInfo & CGImageAlphaInfo.premultipliedFirst.rawValue == CGImageAlphaInfo.first.rawValue,
+                bitmapInfo & CGImageAlphaInfo.premultipliedLast.rawValue == CGImageAlphaInfo.first.rawValue,
+            ]
+            return checks.contains(true)
+        }
         
-        fileprivate let colorSpace: CGColorSpaceModel
+        internal var isSuitableForExtendedColorSpace: Bool {
+            let checks = [
+                bitmapInfo & CGImageComponentInfo.float.rawValue == CGImageComponentInfo.float.rawValue,
+                bitmapInfo & CGImagePixelFormatInfo.RGBCIF10.rawValue == CGImagePixelFormatInfo.RGBCIF10.rawValue
+            ]
+            return checks.contains(true)
+        }
         
-        fileprivate let bitmapInfo: UInt32
+        internal let colorModel: CGColorSpaceModel
+        
+        internal let bitmapInfo: UInt32
         
         
-        fileprivate static let allCases: [ParameterPreset] = [
-            ParameterPreset(bitsPerPixel: 16,  bitsPerComponent: 5,  hasAlpha: false, colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue),
-            ParameterPreset(bitsPerPixel: 32,  bitsPerComponent: 8,  hasAlpha: false, colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue),
-            ParameterPreset(bitsPerPixel: 32,  bitsPerComponent: 8,  hasAlpha: false, colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
-            ParameterPreset(bitsPerPixel: 32,  bitsPerComponent: 8,  hasAlpha: true,  colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue),
-            ParameterPreset(bitsPerPixel: 32,  bitsPerComponent: 8,  hasAlpha: true,  colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+        #if os(macOS)
+        internal static let allCases: [ParameterPreset] = sharedCases + macOSCases
+        #else
+        internal static let allCases: [ParameterPreset] = sharedCases
+        #endif
+        
+        private static let sharedCases: [ParameterPreset] = [
+            /*
+             8  bits per pixel,         8  bits per component,         kCGImageAlphaOnly
+             8  bits per pixel,         8  bits per component,         kCGImageAlphaNone
+             16 bits per pixel,         8  bits per component,         kCGImageAlphaNoneSkipLast
+             16 bits per pixel,         8  bits per component,         kCGImageAlphaPremultipliedLast
+             16 bits per pixel,         16 bits per component,         kCGImageAlphaNone
+             16 bits per pixel,         16 bits per component,         kCGImageAlphaNone|kCGBitmapFloatComponents|kCGBitmapByteOrder16Little
+             32 bits per pixel,         32 bits per component,         kCGImageAlphaNone|kCGBitmapFloatComponents
+             */
+            ParameterPreset(bitsPerPixel: 8, bitsPerComponent: 8, colorModel: .monochrome,
+                            bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue),
+            ParameterPreset(bitsPerPixel: 8, bitsPerComponent: 8, colorModel: .monochrome,
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue),
+            ParameterPreset(bitsPerPixel: 16, bitsPerComponent: 8, colorModel: .monochrome,
+                            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
+            ParameterPreset(bitsPerPixel: 16, bitsPerComponent: 8, colorModel: .monochrome,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+            ParameterPreset(bitsPerPixel: 16, bitsPerComponent: 16, colorModel: .monochrome,
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue | CGImageComponentInfo.float.rawValue | CGImageByteOrderInfo.order16Little.rawValue),
+            ParameterPreset(bitsPerPixel: 32, bitsPerComponent: 32, colorModel: .monochrome,
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue | CGImageComponentInfo.float.rawValue),
             
-            ParameterPreset(bitsPerPixel: 32,  bitsPerComponent: 10, hasAlpha: false, colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.none.rawValue | CGImagePixelFormatInfo.RGBCIF10.rawValue | CGImageByteOrderInfo.order32Little.rawValue),
+            /*
+             16  bits per pixel,         5  bits per component,         kCGImageAlphaNoneSkipFirst
+             32  bits per pixel,         8  bits per component,         kCGImageAlphaNoneSkipFirst
+             32  bits per pixel,         8  bits per component,         kCGImageAlphaNoneSkipLast
+             32  bits per pixel,         8  bits per component,         kCGImageAlphaPremultipliedFirst
+             32  bits per pixel,         8  bits per component,         kCGImageAlphaPremultipliedLast
+             32  bits per pixel,         10 bits per component,         kCGImageAlphaNone|kCGImagePixelFormatRGBCIF10|kCGImageByteOrder32Little
+             64  bits per pixel,         16 bits per component,         kCGImageAlphaPremultipliedLast
+             64  bits per pixel,         16 bits per component,         kCGImageAlphaNoneSkipLast
+             64  bits per pixel,         16 bits per component,         kCGImageAlphaPremultipliedLast|kCGBitmapFloatComponents|kCGImageByteOrder16Little
+             64  bits per pixel,         16 bits per component,         kCGImageAlphaNoneSkipLast|kCGBitmapFloatComponents|kCGImageByteOrder16Little
+             128 bits per pixel,         32 bits per component,         kCGImageAlphaPremultipliedLast|kCGBitmapFloatComponents
+             128 bits per pixel,         32 bits per component,         kCGImageAlphaNoneSkipLast|kCGBitmapFloatComponents
+             */
+            ParameterPreset(bitsPerPixel: 16, bitsPerComponent: 5, colorModel: .rgb,
+                            bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue),
+            ParameterPreset(bitsPerPixel: 32, bitsPerComponent: 8, colorModel: .rgb,
+                            bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue),
+            ParameterPreset(bitsPerPixel: 32, bitsPerComponent: 8, colorModel: .rgb,
+                            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
+            ParameterPreset(bitsPerPixel: 32, bitsPerComponent: 8, colorModel: .rgb,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue),
+            ParameterPreset(bitsPerPixel: 32, bitsPerComponent: 8, colorModel: .rgb,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+            ParameterPreset(bitsPerPixel: 32, bitsPerComponent: 10, colorModel: .rgb,
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue | CGImagePixelFormatInfo.RGBCIF10.rawValue | CGImageByteOrderInfo.order32Little.rawValue),
+            ParameterPreset(bitsPerPixel: 64, bitsPerComponent: 16, colorModel: .rgb,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+            ParameterPreset(bitsPerPixel: 64, bitsPerComponent: 16, colorModel: .rgb,
+                            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
+            ParameterPreset(bitsPerPixel: 64, bitsPerComponent: 16, colorModel: .rgb,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGImageComponentInfo.float.rawValue | CGImageByteOrderInfo.order16Little.rawValue),
+            ParameterPreset(bitsPerPixel: 64, bitsPerComponent: 16, colorModel: .rgb,
+                            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGImageComponentInfo.float.rawValue | CGImageByteOrderInfo.order16Little.rawValue),
+            ParameterPreset(bitsPerPixel: 128, bitsPerComponent: 32, colorModel: .rgb,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGImageComponentInfo.float.rawValue),
+            ParameterPreset(bitsPerPixel: 128, bitsPerComponent: 32, colorModel: .rgb,
+                            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGImageComponentInfo.float.rawValue),
             
-            ParameterPreset(bitsPerPixel: 64,  bitsPerComponent: 16, hasAlpha: true,  colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
-            ParameterPreset(bitsPerPixel: 64,  bitsPerComponent: 16, hasAlpha: false, colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
-            
-            ParameterPreset(bitsPerPixel: 64,  bitsPerComponent: 16, hasAlpha: true,  colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.floatComponents.rawValue | CGImageByteOrderInfo.order16Little.rawValue),
-            ParameterPreset(bitsPerPixel: 64,  bitsPerComponent: 16, hasAlpha: false, colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.floatComponents.rawValue | CGImageByteOrderInfo.order16Little.rawValue),
-            
-            ParameterPreset(bitsPerPixel: 128, bitsPerComponent: 32, hasAlpha: true,  colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.floatComponents.rawValue),
-            ParameterPreset(bitsPerPixel: 128, bitsPerComponent: 32, hasAlpha: false, colorSpace: .rgb, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue | CGBitmapInfo.floatComponents.rawValue),
-            
-            
-            ParameterPreset(bitsPerPixel: 8,   bitsPerComponent: 8,  hasAlpha: true,  colorSpace: .monochrome, bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue),
-            ParameterPreset(bitsPerPixel: 8,   bitsPerComponent: 8,  hasAlpha: false, colorSpace: .monochrome, bitmapInfo: CGImageAlphaInfo.none.rawValue),
-            ParameterPreset(bitsPerPixel: 16,  bitsPerComponent: 8,  hasAlpha: false, colorSpace: .monochrome, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue),
-            ParameterPreset(bitsPerPixel: 16,  bitsPerComponent: 8,  hasAlpha: true,  colorSpace: .monochrome, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
-            ParameterPreset(bitsPerPixel: 16,  bitsPerComponent: 16, hasAlpha: false, colorSpace: .monochrome, bitmapInfo: CGImageAlphaInfo.none.rawValue),
-            
-            ParameterPreset(bitsPerPixel: 16,  bitsPerComponent: 16, hasAlpha: false, colorSpace: .monochrome, bitmapInfo: CGImageAlphaInfo.none.rawValue | CGBitmapInfo.floatComponents.rawValue | CGBitmapInfo.byteOrder16Little.rawValue),
-            ParameterPreset(bitsPerPixel: 32,  bitsPerComponent: 32, hasAlpha: false, colorSpace: .monochrome, bitmapInfo: CGImageAlphaInfo.none.rawValue | CGBitmapInfo.floatComponents.rawValue)
+            /*
+             32  bits per pixel,         8  bits per component,         kCGImageAlphaNone
+             64  bits per pixel,         16 bits per component,         kCGImageAlphaNone
+             64  bits per pixel,         16 bits per component,         kCGImageAlphaNone|kCGBitmapFloatComponents
+             128 bits per pixel,         32 bits per component,         kCGImageAlphaNone|kCGBitmapFloatComponents
+             128 bits per pixel,         32 bits per component,         kCGImageAlphaNone|kCGBitmapFloatComponents|kCGBitmapByteOrder32Little
+             128 bits per pixel,         32 bits per component,         kCGImageAlphaNone|kCGBitmapFloatComponents|kCGBitmapByteOrder32Big
+             */
+            ParameterPreset(bitsPerPixel: 32, bitsPerComponent: 8, colorModel: .cmyk,
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue),
+            ParameterPreset(bitsPerPixel: 64, bitsPerComponent: 16, colorModel: .cmyk,
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue),
+            ParameterPreset(bitsPerPixel: 64, bitsPerComponent: 16, colorModel: .cmyk,
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue | CGImageComponentInfo.float.rawValue | CGImageByteOrderInfo.order16Little.rawValue),
+            ParameterPreset(bitsPerPixel: 128, bitsPerComponent: 32, colorModel: .cmyk,
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue | CGImageComponentInfo.float.rawValue),
+            ParameterPreset(bitsPerPixel: 128, bitsPerComponent: 32, colorModel: .cmyk,
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue | CGImageComponentInfo.float.rawValue | CGImageByteOrderInfo.order32Little.rawValue),
+            ParameterPreset(bitsPerPixel: 128, bitsPerComponent: 32, colorModel: .cmyk,
+                            bitmapInfo: CGImageAlphaInfo.none.rawValue | CGImageComponentInfo.float.rawValue | CGImageByteOrderInfo.order32Big.rawValue),
+        ]
+        
+        func makeDefaultColorSpace() -> CGColorSpace {
+            switch self.colorModel {
+            case .monochrome:
+                CGColorSpace(name: CGColorSpace.linearGray)!
+            case .rgb:
+                if self.bitmapInfo & CGImagePixelFormatInfo.RGBCIF10.rawValue == CGImagePixelFormatInfo.RGBCIF10.rawValue {
+                    CGColorSpace(name: CGColorSpace.extendedSRGB)!
+                } else {
+                    CGColorSpace(name: CGColorSpace.sRGB)!
+                }
+            case .cmyk:
+                CGColorSpace(name: CGColorSpace.genericCMYK)!
+                
+            default:
+                fatalError()
+            }
+        }
+        
+        private static let macOSCases: [ParameterPreset] = [
         ]
         
     }

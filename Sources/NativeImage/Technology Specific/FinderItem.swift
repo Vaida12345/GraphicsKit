@@ -112,6 +112,8 @@ public extension FinderItem.AsyncLoadableContent where Result == NativeImage {
     ///
     /// The resulting image is scaled down to the required `size`.
     ///
+    /// This method can returned custom icon. However, it may also produce wrong generic icons.
+    ///
     /// - Parameters:
     ///   - size: The size of the image.
     ///
