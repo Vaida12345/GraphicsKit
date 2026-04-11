@@ -211,7 +211,7 @@ public extension FinderItem.AsyncLoadableContent where Result == NativeImage {
         let aspectRatio = max(cgImage.size.width / cgImage.size.height, cgImage.size.height / cgImage.size.width)
         let margin = linearInterpolate(aspectRatio, in: 1...2, to: 0.837 ... 0.955)
         let contextSize = CGSize(width: cgImage.size.width / margin, height: cgImage.size.height / margin)
-        let context = CGContext.createContext(size: contextSize, bitsPerComponent: cgImage.bitsPerComponent, space: cgImage.colorSpace, withAlpha: true)
+        let context = CGContext.createContext(size: contextSize, bitsPerComponent: 8, space: nil, withAlpha: true)
         
         context.setAllowsAntialiasing(true)
         context.setShouldAntialias(true)
