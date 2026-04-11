@@ -50,7 +50,7 @@ public extension CGContext {
                 guard space?.name.isNil(or: { ($0 as String).localizedStandardContains("extended") => preset.isSuitableForExtendedColorSpace }) ?? true else { return false }
                 
                 // CIF10 bitmap context requires extended sRGB color space
-                if preset.bitmapInfo & CGImagePixelFormatInfo.RGBCIF10.rawValue != 0 {
+                if preset.bitmapInfo.pixelFormat == .RGBCIF10 {
                     guard let name = space?.name else { return false }
                     return (name as String).localizedStandardContains("extended")
                 }
@@ -199,15 +199,16 @@ public extension CGContext {
              16 bits per pixel,         16 bits per component,         kCGImageAlphaNone|kCGBitmapFloatComponents|kCGBitmapByteOrder16Little
              32 bits per pixel,         32 bits per component,         kCGImageAlphaNone|kCGBitmapFloatComponents
              */
-// Don't use alphaOnly.
-//            ParameterPreset(bitsPerPixel: 8, bitsPerComponent: 8, colorModel: .monochrome,
-//                            bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue),
+            ParameterPreset(bitsPerPixel: 8, bitsPerComponent: 8, colorModel: .monochrome,
+                            bitmapInfo: CGBitmapInfo(alpha: .alphaOnly)),
             ParameterPreset(bitsPerPixel: 8, bitsPerComponent: 8, colorModel: .monochrome,
                             bitmapInfo: CGBitmapInfo(alpha: .none)),
             ParameterPreset(bitsPerPixel: 16, bitsPerComponent: 8, colorModel: .monochrome,
                             bitmapInfo: CGBitmapInfo(alpha: .noneSkipLast)),
             ParameterPreset(bitsPerPixel: 16, bitsPerComponent: 8, colorModel: .monochrome,
                             bitmapInfo: CGBitmapInfo(alpha: .premultipliedLast)),
+            ParameterPreset(bitsPerPixel: 16, bitsPerComponent: 16, colorModel: .monochrome,
+                            bitmapInfo: CGBitmapInfo(alpha: .none)),
             ParameterPreset(bitsPerPixel: 16, bitsPerComponent: 16, colorModel: .monochrome,
                             bitmapInfo: CGBitmapInfo(alpha: .none, component: .float, byteOrder: .order16Little)),
             ParameterPreset(bitsPerPixel: 32, bitsPerComponent: 32, colorModel: .monochrome,
