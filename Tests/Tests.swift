@@ -98,14 +98,8 @@ struct CGContextCreateTests {
     
     @Suite
     struct CombinationTests {
-        func bitmapHasAlpha(_ bitmapInfo: UInt32) -> Bool {
-            let checks = [
-                bitmapInfo & CGImageAlphaInfo.first.rawValue == CGImageAlphaInfo.first.rawValue,
-                bitmapInfo & CGImageAlphaInfo.last.rawValue == CGImageAlphaInfo.first.rawValue,
-                bitmapInfo & CGImageAlphaInfo.premultipliedFirst.rawValue == CGImageAlphaInfo.first.rawValue,
-                bitmapInfo & CGImageAlphaInfo.premultipliedLast.rawValue == CGImageAlphaInfo.first.rawValue,
-            ]
-            return checks.contains(true)
+        func bitmapHasAlpha(_ bitmapInfo: CGImageAlphaInfo) -> Bool {
+            return [CGImageAlphaInfo.first, .last, .premultipliedLast, .premultipliedFirst].contains(bitmapInfo)
         }
         
         @Test func createContext_MonochromeCombinations() async throws {
@@ -132,7 +126,7 @@ struct CGContextCreateTests {
                             #expect(context.bitsPerComponent > 0)
                             #expect(context.colorSpace != nil)
                             if withAlpha {
-                                #expect(bitmapHasAlpha(context.bitmapInfo.rawValue))
+                                #expect(bitmapHasAlpha(context.bitmapInfo.alpha))
                             }
                         }
                     }
@@ -166,7 +160,7 @@ struct CGContextCreateTests {
                             #expect(context.bitsPerComponent > 0)
                             #expect(context.colorSpace != nil)
                             if withAlpha {
-                                #expect(bitmapHasAlpha(context.bitmapInfo.rawValue))
+                                #expect(bitmapHasAlpha(context.bitmapInfo.alpha))
                             }
                         }
                     }
@@ -195,7 +189,7 @@ struct CGContextCreateTests {
                             #expect(context.bitsPerComponent > 0)
                             #expect(context.colorSpace != nil)
                             if withAlpha {
-                                #expect(bitmapHasAlpha(context.bitmapInfo.rawValue))
+                                #expect(bitmapHasAlpha(context.bitmapInfo.alpha))
                             }
                         }
                     }

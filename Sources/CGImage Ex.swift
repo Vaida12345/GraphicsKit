@@ -148,8 +148,7 @@ public extension CGImage {
         if self.size.isSquare { return self }
         
         let resultSize = CGSize.square(size.longerSide)
-        let context = CGContext.createContext(size: resultSize, bitsPerComponent: self.bitsPerComponent, space: self.colorSpace ?? CGColorSpaceCreateDeviceRGB(), withAlpha: true)
-        
+        let context = CGContext.createContext(size: resultSize, bitsPerComponent: self.bitsPerComponent, space: self.colorSpace, withAlpha: true)
         context.interpolationQuality = .high
         
         let rect = CGRect(center: CGPoint(x: size.longerSide / 2, y: size.longerSide / 2), size: size)
