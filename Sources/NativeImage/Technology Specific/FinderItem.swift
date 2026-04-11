@@ -118,9 +118,21 @@ public extension FinderItem.AsyncLoadableContent where Result == NativeImage {
     /// - Returns: If the file does not exist, or no representations larger than `size`, returns nil.
     ///
     /// - SeeAlso: ``bestIcon(size:)``.
-    static func icon(size: CGSize) -> FinderItem.AsyncLoadableContent<NativeImage, any Error> {
+    @available(*, deprecated, renamed: "bestIcon", message: "It is dangerous to use this method directly, as it may produce unexpected results.")
+    static func icon(size: CGSize? = nil) -> FinderItem.AsyncLoadableContent<NativeImage, any Error> {
         .init { (source: FinderItem) throws -> NativeImage in
-            try await generateImage(type: .icon, url: source.url, size: size).0
+            guard source.exists else { throw FinderItem.FileError(code: .cannotRead(reason: .noSuchFile), source: source) }
+            let icons = NSWorkspace.shared.icon(forFile: source.path)
+            
+            guard let size else { return icons }
+            
+            if let first = icons.representations.first(where: { CGFloat($0.pixelsHigh) >= size.height && CGFloat($0.pixelsWide) >= size.width }),
+               let image = first.cgImage(forProposedRect: nil, context: nil, hints: nil),
+               let scaled = image.resized(to: image.size.aspectRatio(.fit, in: size)) {
+                return NativeImage(cgImage: scaled)
+            } else {
+                throw FinderItem.FileError(code: .cannotRead(reason: .corruptFile), source: source)
+            }
         }
     }
 #endif
