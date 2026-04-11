@@ -27,7 +27,7 @@ public extension CGContext {
     ///   - withAlpha: Indicating whether the image has alpha channel.
     ///
     /// - Returns: The best match for the given parameters. If a match for the colorSpace cannot be found, `rgb` would be used instead.
-    static func createContext(size: CGSize, bitsPerComponent: Int, space: CGColorSpace, withAlpha: Bool) -> CGContext {
+    static func createContext(size: CGSize, bitsPerComponent: Int, space: CGColorSpace?, withAlpha: Bool) -> CGContext {
         createContext(size: size, bitsPerComponent: bitsPerComponent, space: space, alpha: withAlpha ? .hasAlpha : .none)
     }
     
@@ -36,22 +36,22 @@ public extension CGContext {
     /// - Parameters:
     ///   - size: The size, in pixels, of the required bitmap.
     ///   - bitsPerComponent: The number of bits to use for each component of a pixel in memory.
-    ///   - space: The color space to use for the bitmap context.
+    ///   - space: The color space to use for the bitmap context. If not specified, defaults to `rgb`.
     ///   - withAlpha: Indicating whether the image has alpha channel.
     ///
     /// - Returns: The best match for the given parameters. If a match for the colorSpace cannot be found, `rgb` would be used instead.
-    static func createContext(size: CGSize, bitsPerComponent: Int, space: CGColorSpace, alpha: CreateContextAlphaOption) -> CGContext {
+    static func createContext(size: CGSize, bitsPerComponent: Int, space: CGColorSpace?, alpha: CreateContextAlphaOption) -> CGContext {
         let logger = Logger(subsystem: "NativeImage", category: "CGContext.createContext")
         
         let optimalPreset = ParameterPreset.allCases
             .filter { preset in
-                guard preset.alpha == alpha && preset.colorModel == space.model else { return false }
+                guard preset.alpha == alpha && preset.colorModel == space?.model ?? .rgb else { return false }
                 // CGColorSpace which uses extended range requires floating point or CIF10 bitmap context
-                guard space.name.isNil(or: { ($0 as String).localizedStandardContains("extended") => preset.isSuitableForExtendedColorSpace }) else { return false }
+                guard space?.name.isNil(or: { ($0 as String).localizedStandardContains("extended") => preset.isSuitableForExtendedColorSpace }) ?? true else { return false }
                 
                 // CIF10 bitmap context requires extended sRGB color space
                 if preset.bitmapInfo & CGImagePixelFormatInfo.RGBCIF10.rawValue == CGImagePixelFormatInfo.RGBCIF10.rawValue {
-                    guard let name = space.name else { return false }
+                    guard let name = space?.name else { return false }
                     return (name as String).localizedStandardContains("extended")
                 }
                 
@@ -68,7 +68,7 @@ public extension CGContext {
                 height: Int(size.height),
                 bitsPerComponent: optimalPreset.bitsPerComponent,
                 bytesPerRow: 0,
-                space: space,
+                space: space ?? optimalPreset.makeDefaultColorSpace(),
                 bitmapInfo: optimalPreset.bitmapInfo
             ) {
                 logger.info("Return with optimal preset & original color space.")
@@ -93,7 +93,7 @@ public extension CGContext {
         // how about colorspace in the same colorspace model?
         let fallbackPreset = ParameterPreset.allCases
             .filter { preset in
-                preset.alpha == alpha && preset.colorModel == space.model
+                preset.alpha == alpha && preset.colorModel == space?.model ?? .rgb
             }
             .nearestElement { instance in
                 instance.bitsPerComponent - bitsPerComponent

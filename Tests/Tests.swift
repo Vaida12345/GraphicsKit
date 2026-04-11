@@ -98,6 +98,16 @@ struct CGContextCreateTests {
     
     @Suite
     struct CombinationTests {
+        func bitmapHasAlpha(_ bitmapInfo: UInt32) -> Bool {
+            let checks = [
+                bitmapInfo & CGImageAlphaInfo.first.rawValue == CGImageAlphaInfo.first.rawValue,
+                bitmapInfo & CGImageAlphaInfo.last.rawValue == CGImageAlphaInfo.first.rawValue,
+                bitmapInfo & CGImageAlphaInfo.premultipliedFirst.rawValue == CGImageAlphaInfo.first.rawValue,
+                bitmapInfo & CGImageAlphaInfo.premultipliedLast.rawValue == CGImageAlphaInfo.first.rawValue,
+            ]
+            return checks.contains(true)
+        }
+        
         @Test func createContext_MonochromeCombinations() async throws {
             let spaces: [CGColorSpace] = [
                 CGColorSpace(name: CGColorSpace.genericGrayGamma2_2),
@@ -121,6 +131,9 @@ struct CGContextCreateTests {
                             #expect(context.height == Int(size.height))
                             #expect(context.bitsPerComponent > 0)
                             #expect(context.colorSpace != nil)
+                            if withAlpha {
+                                #expect(bitmapHasAlpha(context.bitmapInfo.rawValue))
+                            }
                         }
                     }
                 }
@@ -152,6 +165,9 @@ struct CGContextCreateTests {
                             #expect(context.height == Int(size.height))
                             #expect(context.bitsPerComponent > 0)
                             #expect(context.colorSpace != nil)
+                            if withAlpha {
+                                #expect(bitmapHasAlpha(context.bitmapInfo.rawValue))
+                            }
                         }
                     }
                 }
@@ -178,6 +194,9 @@ struct CGContextCreateTests {
                             #expect(context.height == Int(size.height))
                             #expect(context.bitsPerComponent > 0)
                             #expect(context.colorSpace != nil)
+                            if withAlpha {
+                                #expect(bitmapHasAlpha(context.bitmapInfo.rawValue))
+                            }
                         }
                     }
                 }
