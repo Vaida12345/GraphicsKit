@@ -206,7 +206,11 @@ public extension FinderItem.AsyncLoadableContent where Result == (icon: NativeIm
                 return try await (generateImage(type: .icon, url: source.url, size: size).0, .genericIcon)
             }
 #else
-            return try await source.load(.preview(size: size))
+            do {
+                return try await (generateImage(type: .thumbnail, url: source.url, size: size).0, .preview)
+            } catch {
+                return try await (generateImage(type: .icon, url: source.url, size: size).0, .genericIcon)
+            }
 #endif
         }
     }
