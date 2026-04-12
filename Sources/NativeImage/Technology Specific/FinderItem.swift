@@ -140,16 +140,6 @@ public extension FinderItem.AsyncLoadableContent where Result == NativeImage {
 #endif
     
 #if !os(tvOS) && !os(watchOS)
-    private static func generateImage(type: QLThumbnailGenerator.Request.RepresentationTypes, url: URL, size: CGSize) async throws -> (NativeImage, QLThumbnailRepresentation.RepresentationType) {
-        let result = try await QLThumbnailGenerator.shared.generateBestRepresentation(for: .init(fileAt: url, size: size, scale: 1, representationTypes: type))
-        
-#if os(macOS)
-        return (result.nsImage, result.type)
-#elseif os(iOS) || os(visionOS)
-        return (result.uiImage, result.type)
-#endif
-    }
-    
     /// Generate the preview image for the given source.
     ///
     /// - Parameters:
@@ -170,6 +160,21 @@ public extension FinderItem.AsyncLoadableContent where Result == NativeImage {
     }
 #endif
     
+}
+
+#if !os(tvOS) && !os(watchOS)
+private func generateImage(type: QLThumbnailGenerator.Request.RepresentationTypes, url: URL, size: CGSize) async throws -> (NativeImage, QLThumbnailRepresentation.RepresentationType) {
+    let result = try await QLThumbnailGenerator.shared.generateBestRepresentation(for: .init(fileAt: url, size: size, scale: 1, representationTypes: type))
+    
+#if os(macOS)
+    return (result.nsImage, result.type)
+#elseif os(iOS) || os(visionOS)
+    return (result.uiImage, result.type)
+#endif
+}
+#endif
+
+public extension FinderItem.AsyncLoadableContent where Result == (icon: NativeImage, representation: ThumbnailRepresentation) {
     
     /// The best representation, the preview or icon, of a file.
     ///
@@ -187,18 +192,18 @@ public extension FinderItem.AsyncLoadableContent where Result == NativeImage {
     /// ```
     ///
     /// - Returns: A image fitted in `size`.
-    static func bestIcon(size: CGSize) -> FinderItem.AsyncLoadableContent<NativeImage, any Error> {
+    static func bestIcon(size: CGSize) -> FinderItem.AsyncLoadableContent<(icon: NativeImage, representation: ThumbnailRepresentation), any Error> {
         .init { source in
 #if canImport(AppKit) && !targetEnvironment(macCatalyst)
             if try source.load(.hasCustomIcon) {
-                return try await source.load(.icon(size: size))
+                return try await (source.load(.icon(size: size)), .customIcon)
             } else {
                 if let thumbnail = try? await generateImage(type: .thumbnail, url: source.url, size: size), thumbnail.1 == .thumbnail || thumbnail.1 == .lowQualityThumbnail {
-                    guard let cgImage = thumbnail.0.cgImage, let rendered = await renderIconStyle(cgImage: cgImage) else { return thumbnail.0 }
-                    return NativeImage(cgImage: rendered)
+                    guard let cgImage = thumbnail.0.cgImage, let rendered = await renderIconStyle(cgImage: cgImage) else { return (thumbnail.0, .preview) }
+                    return (NativeImage(cgImage: rendered), .preview)
                 }
                 
-                return try await generateImage(type: .icon, url: source.url, size: size).0
+                return try await (generateImage(type: .icon, url: source.url, size: size).0, .genericIcon)
             }
 #else
             return try await source.load(.preview(size: size))
@@ -273,5 +278,21 @@ public extension FinderItem.AsyncLoadableContent where Result == NativeImage {
         return context.makeImage()
     }
 #endif
+}
+
+
+public enum ThumbnailRepresentation: Hashable, Sendable, CaseIterable, Codable {
     
+    /// Indicates the user has created a unique icon for the file, and such icon is returned.
+    ///
+    /// This icon is unique to the file.
+    case customIcon
+    
+    /// Indicates the system generated a preview based on the content of the file.
+    ///
+    /// This icon is unique to the file.
+    case preview
+    
+    /// Indicates a generic icon to this type of file.
+    case genericIcon
 }
