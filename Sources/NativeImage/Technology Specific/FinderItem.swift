@@ -79,7 +79,7 @@ public extension CGImage {
 }
 
 
-public extension FinderItem.LoadableContent {
+public extension FinderItem.LoadableContent where Result == NativeImage {
     
     /// Returns the image at the location, if exists.
     static var image: FinderItem.LoadableContent<NativeImage, any Error> {
@@ -95,14 +95,25 @@ public extension FinderItem.LoadableContent {
             }
         }
     }
+}
+
+public extension FinderItem.LoadableContent where Result == CGImage {
     
     /// Returns the image at the location, if exists.
     static var cgImage: FinderItem.LoadableContent<CGImage, any Error> {
         .init { (source: FinderItem) throws -> CGImage in
-            try self.image.contentLoader(source).cgImage!
+            guard source.isFile else {
+                throw FinderItem.FileError(code: .cannotRead(reason: .corruptFile), source: source)
+            }
+            let data = try Data(at: source)
+            if let image = NativeImage(data: data) {
+                guard let cgImage = image.cgImage else { throw FinderItem.FileError(code: .cannotRead(reason: .corruptFile), source: source) }
+                return cgImage
+            } else {
+                throw FinderItem.FileError(code: .cannotRead(reason: .corruptFile), source: source)
+            }
         }
     }
-    
 }
 
 public extension FinderItem.AsyncLoadableContent where Result == NativeImage {
@@ -195,7 +206,7 @@ public extension FinderItem.AsyncLoadableContent where Result == (icon: NativeIm
     static func bestIcon(size: CGSize) -> FinderItem.AsyncLoadableContent<(icon: NativeImage, representation: ThumbnailRepresentation), any Error> {
         .init { source in
 #if canImport(AppKit) && !targetEnvironment(macCatalyst)
-            if try source.load(.hasCustomIcon) {
+            if try source.attributes.hasCustomIcon {
                 return try await (source.load(.icon(size: size)), .customIcon)
             } else {
                 if let thumbnail = try? await generateImage(type: .thumbnail, url: source.url, size: size), thumbnail.1 == .thumbnail || thumbnail.1 == .lowQualityThumbnail {
