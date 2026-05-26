@@ -29,7 +29,8 @@ public extension View {
     @MainActor
     func render(to destination: FinderItem, format: NativeImage.ImageFormatOption? = nil, scale: Double = 2) throws {
         let renderer = ImageRenderer(content: self)
-        if format == .pdf || destination.extension == "pdf" {
+        let resolvedFormat = format ?? (try? NativeImage.ImageFormatOption.inferredFrom(extension: destination.extension))
+        if resolvedFormat == .pdf {
             var succeed = false
             renderer.render { size, render in
                 var mediaBox = CGRect(origin: .zero, size: size.scaled(by: scale))

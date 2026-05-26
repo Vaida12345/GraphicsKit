@@ -43,21 +43,21 @@ struct CGContextCreateTests {
     }
     
     @Test(.disabled()) func rgbColorSpace() async throws {
-        let grayColorSpaces: [CFString] = [
+        let rgbColorSpaces: [CFString] = [
             CGColorSpace.sRGB,
             CGColorSpace.linearSRGB,
             CGColorSpace.extendedSRGB,
             CGColorSpace.adobeRGB1998,
             CGColorSpace.genericRGBLinear,
             CGColorSpace.extendedLinearSRGB,
-            
+
             CGColorSpace.displayP3,
             CGColorSpace.displayP3_PQ,
             CGColorSpace.displayP3_HLG,
             CGColorSpace.extendedLinearDisplayP3
         ]
-        
-        for colorSpace in grayColorSpaces {
+
+        for colorSpace in rgbColorSpaces {
             print(colorSpace)
             let colorSpace = CGColorSpace(name: colorSpace)!
             for preset in CGContext.ParameterPreset.allCases.filter({ $0.colorModel == .rgb }) {
@@ -75,11 +75,11 @@ struct CGContextCreateTests {
     }
     
     @Test func cmykColorSpace() async throws {
-        let grayColorSpaces: [CFString] = [
+        let cmykColorSpaces: [CFString] = [
             CGColorSpace.genericCMYK,
         ]
-        
-        for colorSpace in grayColorSpaces {
+
+        for colorSpace in cmykColorSpaces {
             let colorSpace = CGColorSpace(name: colorSpace)!
             for preset in CGContext.ParameterPreset.allCases.filter({ $0.colorModel == .cmyk }) {
                 let context = CGContext(

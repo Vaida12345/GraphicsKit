@@ -145,25 +145,26 @@ public extension CGContext {
     @inlinable
     static func createContext(referencing image: CGImage, size: CGSize? = nil) -> CGContext {
         let targetSize = size ?? image.size
+        let space = image.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!
         if let context = CGContext(data: nil,
                                    width: Int(targetSize.width),
                                    height: Int(targetSize.height),
                                    bitsPerComponent: image.bitsPerComponent,
                                    bytesPerRow: 0,
-                                   space: image.colorSpace!,
+                                   space: space,
                                    bitmapInfo: image.bitmapInfo.rawValue) {
             // A exact matching can be found
             return context
         } else {
             return createContext(size: targetSize,
                                  bitsPerComponent: image.bitsPerComponent,
-                                 space: image.colorSpace!,
+                                 space: space,
                                  withAlpha: ![CGImageAlphaInfo.none, .noneSkipLast, .noneSkipFirst].contains(image.alphaInfo))
         }
     }
     
     /// The preset available in quartz 2D.
-    internal struct ParameterPreset: CaseIterable {
+    internal struct ParameterPreset: CaseIterable, Sendable {
         
         internal let bitsPerPixel: Int
         
@@ -289,7 +290,7 @@ public extension CGContext {
                 CGColorSpace(name: CGColorSpace.genericCMYK)!
                 
             default:
-                fatalError()
+                CGColorSpace(name: CGColorSpace.sRGB)!
             }
         }
     }

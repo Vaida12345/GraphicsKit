@@ -11,7 +11,7 @@ import Essentials
 
 extension CGImage {
     
-    /// A a specular effect to the image.
+    /// Add a specular effect to the image.
     ///
     /// The resulting image is similar to a macOS file preview
     public func addSpecular() async -> CGImage? {

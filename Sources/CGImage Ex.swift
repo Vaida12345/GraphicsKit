@@ -81,7 +81,7 @@ public extension CGImage {
             )
         }
         
-        guard CGImageDestinationFinalize(destination) else { throw DataError.invalidFormat }
+        guard CGImageDestinationFinalize(destination) else { throw DataError.cannotFinalizeData }
         return mutableData as Data
     }
     
@@ -240,7 +240,7 @@ public extension CGImage {
         do {
             try requestHandler.perform([request])
         } catch {
-            let logger = Logger(subsystem: "The Support Framework", category: "CGImage Extensions")
+            let logger = Logger(subsystem: "NativeImage", category: "CGImage Extensions")
             logger.error("Unable to perform \(String(describing: type)) request on the given image, will return nil: \(error)")
             return nil
         }

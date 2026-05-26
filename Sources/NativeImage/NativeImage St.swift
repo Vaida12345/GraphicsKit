@@ -153,7 +153,7 @@ public extension NativeImage {
                 return .png
             case "tif", "tiff":
                 return .tiff
-            case "heif", "heifs", "heic", "heics", "avci", "avcs", "HIF":
+            case "heif", "heifs", "heic", "heics", "avci", "avcs", "hif":
                 return .heic
             case "pdf":
                 return .pdf

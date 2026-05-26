@@ -18,7 +18,7 @@ public extension CGPoint {
     ///   - other: the other point.
     @inlinable
     func distance(to other: CGPoint) -> CGFloat {
-        pow((self.x - other.x), 2) + pow((self.y - other.y), 2).squareRoot()
+        (pow((self.x - other.x), 2) + pow((self.y - other.y), 2)).squareRoot()
     }
     
     /// The vector additional of two points.
